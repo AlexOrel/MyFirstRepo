@@ -11,7 +11,7 @@ import subprocess
     Verifies quantity of system arguments
     Returns 1 if all right; 0 if quantity is more or less than 4
 """
-def verifyArgQuantity(x):
+def verifyArgQuantity(x):#To add readme file
     x = len(sys.argv)
     if(x == 1):
         print('There is nothing left to found from ')

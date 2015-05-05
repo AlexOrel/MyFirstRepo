@@ -1,11 +1,12 @@
 __author__ = 'Skuzzi'
 import sys;
-#sys=['Doesn\'t matter','4001,23212','\"2012-03-09\"','\"2013-11-11\"']
 import re;
 import datetime;
 import paramiko;
 import sqlalchemy;
 import os.path;
+import subprocess
+
 """Takes useless parameter x
     Verifies quantity of system arguments
     Returns 1 if all right; 0 if quantity is more or less than 4
@@ -25,6 +26,7 @@ def verifyArgQuantity(x):
         print('Too many arguments are given ')
         return 0;
     return 1
+
 """Gets string of cameras
 Verifies it for matching correct format: camera1,[camera2,camera3...]
 Returns string of cameras if all right;If no returns None
@@ -42,13 +44,11 @@ Verifies it for matching correct format of data: "Year-month-day" (example:"2012
 If all right returns date; if no returns None
 """
 def verifyDate(i, sysArgv):#Verifies Date for matching date format;i=2-MinDate,i=3-MaxDate,other is not correct
-    print(sysArgv)
     date = re.match(r'^([0-9]{4})-([0-1][0-9])-([0-3][0-9])$', sysArgv,);
     if date:
         yearLimit = int(date.group(1));
         monthLimit = int(date.group(2));
         dayLimit = int(date.group(3));
-        print(yearLimit)
         return datetime.date(yearLimit,monthLimit,dayLimit);
     else:
         print('Incorrect date format')
@@ -67,16 +67,12 @@ def sqlWorkingWith(cameras):#Function takes from database list of directories of
     connection = engine.connect()
     result = connection.execute("select id,properties from objects where id in(%s) AND type = 2"%cameras )
     for row in result:
-        print ("id:", row['id'], (row['properties']).lstrip("{").rstrip("}").split(","))
-        print("row:", row['properties'])
         data  = json.loads(row.properties)
-        print (data['dir'])
         dirList.append(data['dir'])
-    print(dirList)
     connection.close()
     if(dirList):
         return dirList
-    else:#Возможно, лишнее - при оптимизации убрать
+    else:
         return None
 
 """Gets nothing
@@ -91,14 +87,13 @@ def searchDate():
     minDate = verifyDate(2, sys.argv[2])#Send there i=2 to take min Date
     maxDate = verifyDate(3, sys.argv[3])#Send there i=2 to take max Date
     if(minDate == None or maxDate == None or minDate > maxDate):
-        print('Incorrect arguments. Verify your cameras,minDate and maxDate')
+        print('Incorrect arguments. Verify your minDate and maxDate')
         return None;
     dateList = []
     dateList.append(minDate)
     dateList.append(maxDate)
     date = minDate
     while(date < maxDate):
-      #  print('Date:',date)
         date += datetime.timedelta(days = 1)
     return dateList;
 
@@ -163,13 +158,11 @@ def setConnecting(dirList, dateList):#Принимает список ОТНОС
                     os.chdir(str(year) + "/")
                 except OSError:
                     os.chdir(str(year) + "/")
-                print(year)
                 sftp.chdir(mainDir + cameraDir + "/")
                 minMonthCur = minMonth#Если год в промежутке, то надо начинать с 1 месяца
                 if(year > minYear):
                     minMonthCur = 1;
                 month = minMonthCur
-                print("HerehereHerehere",maxMonth)
                 maxMonthCur = maxMonth
                 if(year < maxYear):
                     maxMonthCur = 12;
@@ -180,8 +173,6 @@ def setConnecting(dirList, dateList):#Принимает список ОТНОС
                     else:
                         monthNormal = str(month)
                     if monthNormal in sftp.listdir(mainDir + cameraDir + "/" + str(year)):
-                        print(sftp.listdir(mainDir + cameraDir + "/" + str(year)))
-                        print("Smotri suda:", mainDir + cameraDir + "/" + str(year) + "/" + monthNormal)
                         sftp.chdir(mainDir + cameraDir + "/" + str(year) + "/" + monthNormal)
                         os.chdir(photo + cameraDir + "/" + str(year) + "/")
                         try:#Создали в папке Фото папку текущего (обрабатываемого) месяца
@@ -190,11 +181,11 @@ def setConnecting(dirList, dateList):#Принимает список ОТНОС
                         except OSError:
                             os.chdir(monthNormal + "/")
                         minDayCur = minDay
-                        if(month > minMonth):
+                        if(month > minMonthCur or (month==minMonthCur and year>minYear)):
                             minDayCur = 1;
                         day = minDayCur
                         maxDayCur = maxDay
-                        if(month < maxMonth):
+                        if(month < maxMonthCur or (month==maxMonthCur and year<maxYear)):
                             maxDayCur = 31
                         while(day <= maxDayCur):
                             if(day < 10):
@@ -212,36 +203,31 @@ def setConnecting(dirList, dateList):#Принимает список ОТНОС
                                 for f in sftp.listdir(mainDir + cameraDir+"/"+str(year)+"/"+monthNormal+"/"+dayNormal):
                                     sftp.get(mainDir + cameraDir + "/"+str(year)+"/"+monthNormal+"/"+dayNormal+"/"+f,f)
                             day = day + 1
-
-                    #print(month)
-
                     month = month + 1
             year = year + 1;
-
-
-
-
-    #stre='m4'
-    #sftp.chdir(stre)
-    #os.mkdir('abcd')
-    #remotepath = '1061km/2015/04/02/'
-    #localpath = 'abcd/'
-    #try:
-    #    os.mkdir('photo')
-    #    os.chdir('photo')
-    #except OSError:
-    #    os.chdir('photo')
-    #for f in sftp.listdir(remotepath):
-    #    sftp.get(remotepath+f,f)
     sftp.close()
     transport.close()
     return 1
+
 """Gets nothing
 Main function unites functions
-Returns nothing
+Returns 1 if all right
 """
 def main():
     dirList = searchDir()
+    if(dirList==None):
+        print("Cameras has not been found. ")
+        return None
     dateList = searchDate()
+    if(dirList==None or dateList==None):
+        print("Incorrect date format found. ")
+        return None
     setConnecting(dirList, dateList)
+    try:#Создали в папке Фото папку текущего (обрабатываемого) месяца
+        os.mkdir("/Your_Photo_Archive")
+        os.chdir("/Your_Photo_Archive/"+ "/")
+    except OSError:
+        os.chdir("/Your_Photo_Archive/" + "/")
+    subprocess.call("c:\\winrar a \"c:\\Your_Photo_Archive\\Your_Photo_Archive.rar\" \"c:\photo\"")
+    return 1
 main();
